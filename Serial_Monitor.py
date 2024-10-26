@@ -95,6 +95,28 @@ class SerialMonitor:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to update widget colors: {e}")
 
+
+    def send(self, event=None):
+        try:
+            text = self.input_text.get()
+            if text and text != "Type here to send...":
+                if self.nl_var.get():
+                    text += "\n"  # Add newline if NL checkbox is checked
+                if self.cr_var.get():
+                    text += "\r"  # Add carriage return if CR checkbox is checked
+            
+                # Send the text to the serial connection (if open)
+                if self.serial_connection and self.serial_connection.is_open:
+                    self.serial_connection.write(text.encode('utf-8'))
+                    self.output_text.insert(tk.END, f"\nSent: {text}\n")
+                    if self.autoscroll_var.get():
+                        self.output_text.see(tk.END)
+            
+                self.input_text.delete(0, tk.END)  # Clear the input field
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send data: {e}")
+   
     def create_widgets(self):
         try:
             self.menu_button = tk.Button(self.root, text='☰', command=self.show_menu, bg=self.accent_color, fg='white')
@@ -115,11 +137,12 @@ class SerialMonitor:
             self.baud_combobox.grid(row=0, column=3, padx=5, pady=15, sticky='e')
             self.baud_combobox.bind("<<ComboboxSelected>>", self.on_baud_rate_change)
 
-            self.input_text = tk.Entry(self.root, bg='#3b3b3b', fg='white', width=30)
+            self.input_text = tk.Entry(self.root, bg=self.bg_color, fg=self.fg_color, width=30)
             self.input_text.grid(row=1, column=0, columnspan=4, padx=(10, 20), pady=15, sticky='ew')
             self.input_text.insert(0, "Type here to send...")
             self.input_text.bind("<FocusIn>", self.clear_placeholder)
             self.input_text.bind("<FocusOut>", self.set_placeholder)
+            self.input_text.bind("<Return>", self.send)
 
             checkbox_frame = tk.Frame(self.root, bg=self.accent_color)
             checkbox_frame.grid(row=1, column=4, padx=(5, 15), pady=15, sticky='w')
@@ -326,11 +349,11 @@ class SerialMonitor:
             if port:
                 try:
                     self.serial_connection = serial.Serial(port, baud_rate, timeout=1)
-                    self.output_text.insert(tk.END, f"Connected to {port} at {baud_rate} baud.\n")
+                    self.output_text.insert(tk.END, f"\n Connected to {port} at {baud_rate} baud.\n")
                     self.is_reading = True
                     self.start_reading()
                 except serial.SerialException as e:
-                    self.output_text.insert(tk.END, f"Failed to connect: {e}\n")
+                    self.output_text.insert(tk.END, f"\n\tFailed to connect: {e}\n")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to reconnect: {e}")
 
@@ -344,25 +367,43 @@ class SerialMonitor:
     def read_serial(self):
         try:
             while self.is_reading:
-                if self.serial_connection.in_waiting:
-                    line = self.serial_connection.readline().decode('utf-8', errors='replace')
-                    with self.lock:  # Acquire the lock while updating the UI
-                        self.output_text.insert(tk.END, line)
-                        if self.autoscroll_var.get():
-                            self.output_text.see(tk.END)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to read from serial: {e}")
-
+                if self.serial_connection and self.serial_connection.is_open:
+                    if self.serial_connection.in_waiting:
+                        line = self.serial_connection.readline().decode('utf-8', errors='replace')
+                        with self.lock:  # Acquire the lock while updating the UI
+                            self.output_text.insert(tk.END, line)
+                            if self.autoscroll_var.get():
+                                self.output_text.see(tk.END)
+                else:
+                    break  # Exit the loop if the serial connection is closed
+        except (serial.SerialException, OSError) as e:
+            # Handle the error gracefully without crashing
+            self.output_text.insert(tk.END, f"\n Error reading from serial: {e}\n")
     def pause(self):
         try:
-            self.is_reading = not self.is_reading
-            if self.is_reading:
-                self.start_reading()
-                self.pause_button.config(text="Pause")
-            else:
+            if self.serial_connection and self.serial_connection.is_open:
+                # Close the serial connection
+                self.serial_connection.close()
+                self.serial_connection = None  # Set to None to fully release the port
+            
+                self.is_reading = False  # Stop the reading thread if it's running
                 self.pause_button.config(text="Resume")
+                self.output_text.insert(tk.END, "\n Serial connection paused.\n")
+            else:
+                # Reconnect if paused
+                selected_port = self.port_combobox.get()
+                selected_baud = self.baud_combobox.get()
+            
+                if selected_port and selected_baud:
+                    self.serial_connection = serial.Serial(selected_port, int(selected_baud))
+                    self.is_reading = True  # Start reading again if connection is re-established
+                    self.start_reading()  # Start the reading thread again
+                    self.pause_button.config(text="Pause")
+                    self.output_text.insert(tk.END, "\n Serial connection resumed.\n")
+                else:
+                    messagebox.showerror("Error", "No port or baud rate selected.")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to pause/resume reading: {e}")
+            messagebox.showerror("Error", f"Error toggling connection: {e}")
 
     def clear_output(self):
         try:
@@ -381,7 +422,7 @@ class SerialMonitor:
         try:
             if self.input_text.get() == "Type here to send...":
                 self.input_text.delete(0, tk.END)
-                self.input_text.config(fg='black')
+                self.input_text.config(fg=self.fg_color)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear placeholder: {e}")
 
@@ -389,7 +430,7 @@ class SerialMonitor:
         try:
             if self.input_text.get() == "":
                 self.input_text.insert(0, "Type here to send...")
-                self.input_text.config(fg='grey')
+                self.input_text.config(fg=self.accent_color)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to set placeholder: {e}")
 
