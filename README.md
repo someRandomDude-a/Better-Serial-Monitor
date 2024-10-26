@@ -13,7 +13,7 @@
 3) Package using your preffered software (I use pyinstaller)
 
  **Example Commands:** 
-"pip install pyinstaller"
-"cd path/to/your/local/install/Serial_Monitor.py"
-"pip install -r requirements.txt"
-"pyinstaller --onefile Serial_Monitor.py"
+1. "pip install pyinstaller"
+2. "cd path/to/your/local/install/Serial_Monitor.py"
+3. "pip install -r requirements.txt"
+4. "pyinstaller --onefile Serial_Monitor.py"
