@@ -14,7 +14,8 @@
 
 
  **You Must Whitelist The executable in antivrus software**
- This Project does seem to get flagged constantly by antivirus software
+ 
+ This Project does seem to get flagged constantly by antivirus software,
  This Project DOES NOT have maleware, you can check the source-code yourself
  and build it locally.
 
