@@ -1,0 +1,5 @@
+
+settings.json
+*.pyproj
+/build
+/dist
